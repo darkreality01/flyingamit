@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flappy Fire Pole</title>
+    <link rel="stylesheet" href="try.css">
+</head>
+<body>
+    <!-- Start Screen -->
+    <div id="startScreen" class="screen active">
+        <div class="screen-content">
+            <h1>Flappy Fire Pole</h1>
+            <button id="playButton" class="btn">Play Game</button>
+            <div class="music-controls">
+                <button id="musicToggle" class="btn secondary">Music: ON</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Character Selection Screen -->
+    <div id="characterScreen" class="screen">
+        <div class="screen-content">
+            <h2>Select Your Character</h2>
+            <div class="characters-container">
+                <div class="character" data-character="1">
+                    <img src="amit.png" alt="Fire Bird" class="character-img">
+                    <span>amit ji</span>
+                </div>
+            </div>
+            <button id="backButton" class="btn secondary">Back</button>
+        </div>
+    </div>
+
+    <!-- Game Screen -->
+    <div id="gameScreen" class="screen">
+        <div class="game-container">
+            <div id="scoreDisplay">Score: 0</div>
+            <div class="game-controls">
+                <button id="pauseButton" class="btn-control">⏸️</button>
+                <button id="gameMusicToggle" class="btn-control">🔊</button>
+            </div>
+            <div id="gameArea">
+                <!-- Character and obstacles will be rendered here by JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Pause Screen -->
+    <div id="pauseScreen" class="screen">
+        <div class="screen-content">
+            <h2>Game Paused</h2>
+            <button id="resumeButton" class="btn">Resume Game</button>
+            <button id="quitButton" class="btn secondary">Quit to Menu</button>
+        </div>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="gameOverScreen" class="screen">
+        <div class="screen-content">
+            <h2>Game Over!</h2>
+            <p id="finalScore">Final Score: 0</p>
+            <p id="highScore">High Score: 0</p>
+            <button id="restartButton" class="btn">Play Again</button>
+            <button id="menuButton" class="btn secondary">Main Menu</button>
+        </div>
+    </div>
+
+    <!-- Audio Elements -->
+    <audio id="backgroundMusic" loop>
+        <source src="Captain Himself - In a Spanish Mood [sTXOBw5GA5o].mp3" type="audio/mpeg">
+        Your browser does not support the audio element.
+    </audio>
+    <audio id="jumpSound">
+        <source src="Mario jumping sound effect..mp3" type="audio/mpeg">
+        Your browser does not support the audio element.
+    </audio>
+    <audio id="collisionSound">
+        <source src="assets/sounds/collision.mp3" type="audio/mpeg">
+        Your browser does not support the audio element.
+    </audio>
+    <audio id="dialogue1">
+        <source src="WhatsApp Audio 2025-09-26 at 19.54.41_8390e012.mp3" type="audio/mpeg">
+        Your browser does not support the audio element.
+    </audio>
+
+    <script src="try.js"></script>
+    
+    <script>
+        // Handle image loading errors
+        function handleImageError(img) {
+            console.log('Image failed to load:', img.src);
+            const placeholder = document.createElement('div');
+            placeholder.className = 'character-img-placeholder';
+            placeholder.textContent = 'Char ' + img.parentElement.getAttribute('data-character');
+            img.parentElement.replaceChild(placeholder, img);
+        }
+        
+        // Apply error handler to all character images
+        document.addEventListener('DOMContentLoaded', function() {
+            const characterImages = document.querySelectorAll('.character-img');
+            characterImages.forEach(img => {
+                img.onerror = function() {
+                    handleImageError(this);
+                };
+            });
+        });
+    </script>
+</body>
+</html>
