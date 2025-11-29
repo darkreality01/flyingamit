@@ -1,4 +1,5 @@
-// Game variables
+
+// Game variables - Optimized for performance
 let gameActive = false;
 let gamePaused = false;
 let score = 0;
@@ -7,18 +8,34 @@ let selectedCharacter = 1;
 let characterElement;
 let gameArea;
 let gameLoopId;
+let lastTimestamp = 0;
+let frameCount = 0;
+
+// Physics variables
 let gravity = 0.5;
 let velocity = 0;
 let characterY = 0;
 let characterX = 0;
+
+// Game objects
 let obstacles = [];
-let obstacleSpeed = 3;
-let obstacleFrequency = 120;
-let frameCount = 0;
+let obstacleSpeed = 2.5;
+let obstacleFrequency = 180;
 let lastObstacleX = 0;
+
+// Audio and state
 let collisionSoundPlayed = false;
 let musicEnabled = true;
 let dialoguePlayed = false;
+
+// Performance monitoring
+let fps = 0;
+let lastFpsUpdate = 0;
+let frameTimes = [];
+
+// Mobile detection
+const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+const isLowEndDevice = isMobile && (/Android [2-4]|iOS [1-9]_|iPhone [1-4]/i.test(navigator.userAgent));
 
 // DOM Elements
 const startScreen = document.getElementById('startScreen');
@@ -46,22 +63,51 @@ const jumpSound = document.getElementById('jumpSound');
 const collisionSound = document.getElementById('collisionSound');
 const dialogue1 = document.getElementById('dialogue1');
 
-// Mobile detection
-const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-
 // Initialize game
 function init() {
-    // Load high score from localStorage
+    console.log('Initializing game... Mobile:', isMobile, 'LowEnd:', isLowEndDevice);
+    
+    // Load saved data
     highScore = parseInt(localStorage.getItem('flappyFirePoleHighScore')) || 0;
-    
-    // Load selected character from localStorage
     selectedCharacter = parseInt(localStorage.getItem('flappyFirePoleCharacter')) || 1;
-    
-    // Load music preference from localStorage
     musicEnabled = localStorage.getItem('flappyFirePoleMusic') !== 'false';
-    updateMusicButton();
     
-    // Set up event listeners
+    updateMusicButton();
+    setupEventListeners();
+    initializeAudio();
+    setupImageErrorHandling();
+    
+    // Adjust for device capabilities
+    adjustForDevicePerformance();
+    
+    // Pre-select character
+    const savedCharacter = document.querySelector(`.character[data-character="${selectedCharacter}"]`);
+    if (savedCharacter) {
+        savedCharacter.classList.add('selected');
+    }
+}
+
+function adjustForDevicePerformance() {
+    if (isLowEndDevice) {
+        // Ultra-low settings for very old devices
+        obstacleSpeed = 2;
+        obstacleFrequency = 200;
+        gravity = 0.4;
+    } else if (isMobile) {
+        // Standard mobile settings
+        obstacleSpeed = 2.5;
+        obstacleFrequency = 180;
+        gravity = 0.45;
+    } else {
+        // Desktop settings
+        obstacleSpeed = 3;
+        obstacleFrequency = 120;
+        gravity = 0.5;
+    }
+}
+
+function setupEventListeners() {
+    // Button events
     playButton.addEventListener('click', showCharacterScreen);
     backButton.addEventListener('click', showStartScreen);
     restartButton.addEventListener('click', restartGame);
@@ -85,7 +131,7 @@ function init() {
         });
     });
     
-    // Set up game controls
+    // Game controls
     document.addEventListener('keydown', handleKeyPress);
     
     // Mobile touch controls
@@ -95,17 +141,9 @@ function init() {
         document.addEventListener('click', handleTap);
     }
     
-    // Pre-select the saved character
-    const savedCharacter = document.querySelector(`.character[data-character="${selectedCharacter}"]`);
-    if (savedCharacter) {
-        savedCharacter.classList.add('selected');
-    }
-    
-    // Initialize audio elements
-    initializeAudio();
-    
-    // Handle image loading errors
-    setupImageErrorHandling();
+    // Performance and visibility events
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleWindowBlur);
 }
 
 function setupMobileControls() {
@@ -118,6 +156,11 @@ function setupMobileControls() {
             e.preventDefault();
         }
     }, { passive: false });
+    
+    // Prevent context menu
+    document.addEventListener('contextmenu', function(e) {
+        e.preventDefault();
+    });
 }
 
 function handleMobileTap(e) {
@@ -140,26 +183,26 @@ function setupImageErrorHandling() {
 }
 
 function initializeAudio() {
-    backgroundMusic.volume = 0.4;
-    jumpSound.volume = 0.3;
-    collisionSound.volume = 0.5;
-    dialogue1.volume = 0.6;
+    backgroundMusic.volume = 0.3;
+    jumpSound.volume = 0.2;
+    collisionSound.volume = 0.4;
+    dialogue1.volume = 0.5;
     
-    // Mobile audio fix - preload and play on user interaction
+    // Mobile audio optimization
     if (isMobile) {
-        backgroundMusic.load();
-        jumpSound.load();
-        collisionSound.load();
-        dialogue1.load();
+        backgroundMusic.preload = 'auto';
+        jumpSound.preload = 'auto';
+        collisionSound.preload = 'auto';
+        dialogue1.preload = 'auto';
     }
 }
 
+// Screen management functions
 function showStartScreen() {
     hideAllScreens();
     startScreen.classList.add('active');
     stopBackgroundMusic();
-    dialoguePlayed = false;
-    gamePaused = false;
+    resetGameState();
 }
 
 function showCharacterScreen() {
@@ -190,68 +233,30 @@ function showGameOverScreen() {
 }
 
 function hideAllScreens() {
-    startScreen.classList.remove('active');
-    characterScreen.classList.remove('active');
-    gameScreen.classList.remove('active');
-    pauseScreen.classList.remove('active');
-    gameOverScreen.classList.remove('active');
+    const screens = document.querySelectorAll('.screen');
+    screens.forEach(screen => screen.classList.remove('active'));
 }
 
-function toggleMusic() {
-    musicEnabled = !musicEnabled;
-    localStorage.setItem('flappyFirePoleMusic', musicEnabled);
-    updateMusicButton();
-    
-    if (musicEnabled && gameScreen.classList.contains('active') && !gamePaused) {
-        playBackgroundMusic();
-    } else {
-        stopBackgroundMusic();
+function resetGameState() {
+    dialoguePlayed = false;
+    gamePaused = false;
+    if (gameLoopId) {
+        cancelAnimationFrame(gameLoopId);
+        gameLoopId = null;
     }
 }
 
-function updateMusicButton() {
-    const text = musicEnabled ? 'Music: ON' : 'Music: OFF';
-    if (musicToggle) musicToggle.textContent = text;
-    if (gameMusicToggle) gameMusicToggle.textContent = musicEnabled ? '🔊' : '🔇';
-}
-
-function pauseGame() {
-    if (!gameActive || gamePaused) return;
-    
-    gamePaused = true;
-    cancelAnimationFrame(gameLoopId);
-    stopBackgroundMusic();
-    showPauseScreen();
-}
-
-function resumeGame() {
-    if (!gameActive || !gamePaused) return;
-    
-    gamePaused = false;
-    showGameScreen();
-    gameLoopId = requestAnimationFrame(gameLoop);
-    
-    if (musicEnabled) {
-        playBackgroundMusic();
-    }
-}
-
-function quitToMenu() {
-    gamePaused = false;
-    gameActive = false;
-    cancelAnimationFrame(gameLoopId);
-    showStartScreen();
-}
-
+// Game core functions
 function startGame() {
     showGameScreen();
     
-    // Reset game variables
+    // Reset game state
     gameActive = true;
     gamePaused = false;
     score = 0;
     velocity = 0;
     frameCount = 0;
+    lastTimestamp = 0;
     obstacles = [];
     lastObstacleX = 0;
     collisionSoundPlayed = false;
@@ -260,10 +265,31 @@ function startGame() {
     scoreDisplay.textContent = `Score: ${score}`;
     
     // Set up game area
+    setupGameArea();
+    
+    // Create character
+    createCharacterElement();
+    
+    // Set initial position
+    characterX = gameArea.offsetWidth * 0.2;
+    characterY = gameArea.offsetHeight / 2;
+    updateCharacterPosition();
+    
+    // Start optimized game loop
+    lastTimestamp = performance.now();
+    gameLoopId = requestAnimationFrame(optimizedGameLoop);
+    
+    // Start music
+    if (musicEnabled) {
+        playBackgroundMusic();
+    }
+}
+
+function setupGameArea() {
     gameArea = document.getElementById('gameArea');
     gameArea.innerHTML = '';
     
-    // Create ground and ceiling
+    // Create minimal ground and ceiling
     const ground = document.createElement('div');
     ground.className = 'ground';
     gameArea.appendChild(ground);
@@ -271,35 +297,12 @@ function startGame() {
     const ceiling = document.createElement('div');
     ceiling.className = 'ceiling';
     gameArea.appendChild(ceiling);
-    
-    // Create character
-    createCharacterElement();
-    
-    // Set initial character position
-    characterX = gameArea.offsetWidth * 0.2;
-    characterY = gameArea.offsetHeight / 2;
-    updateCharacterPosition();
-    
-    // Adjust for mobile
-    if (isMobile) {
-        obstacleSpeed = 2.5;
-        obstacleFrequency = 150;
-    }
-    
-    // Start game loop
-    gameLoopId = requestAnimationFrame(gameLoop);
-    
-    // Start background music if enabled
-    if (musicEnabled) {
-        playBackgroundMusic();
-    }
 }
 
 function createCharacterElement() {
     characterElement = document.createElement('div');
     characterElement.className = 'character-element';
     
-    // For character 1, use amit.png
     if (selectedCharacter === 1) {
         const img = new Image();
         img.onload = function() {
@@ -312,7 +315,6 @@ function createCharacterElement() {
         };
         img.src = 'amit.png';
     } else {
-        // For other characters, use placeholder
         characterElement.textContent = `C${selectedCharacter}`;
         characterElement.classList.add('placeholder');
     }
@@ -320,48 +322,59 @@ function createCharacterElement() {
     gameArea.appendChild(characterElement);
 }
 
-function gameLoop() {
+// Optimized Game Loop with frame rate control
+function optimizedGameLoop(timestamp) {
     if (!gameActive || gamePaused) return;
+    
+    // Calculate delta time for consistent physics
+    const deltaTime = timestamp - lastTimestamp;
+    lastTimestamp = timestamp;
+    
+    // Limit frame rate on mobile to save battery and improve performance
+    if (isMobile && deltaTime < 16) { // ~60fps
+        gameLoopId = requestAnimationFrame(optimizedGameLoop);
+        return;
+    }
     
     frameCount++;
     
-    // Apply gravity
-    velocity += gravity;
+    // Apply physics
+    velocity += gravity * (deltaTime / 16); // Normalize to 60fps
     characterY += velocity;
     
-    // Update character position
+    // Update character
     updateCharacterPosition();
     
-    // Generate obstacles
+    // Generate obstacles (less frequent on slow devices)
     if (frameCount - lastObstacleX > obstacleFrequency) {
-        createObstacle();
+        createOptimizedObstacle();
         lastObstacleX = frameCount;
     }
     
     // Move obstacles
     moveObstacles();
     
-    // Check for collisions
+    // Check collisions
     if (checkCollisions()) {
         gameOver();
         return;
     }
     
     // Continue game loop
-    gameLoopId = requestAnimationFrame(gameLoop);
+    gameLoopId = requestAnimationFrame(optimizedGameLoop);
 }
 
 function updateCharacterPosition() {
-    // Keep character within bounds
-    if (characterY < 25) {
-        characterY = 25;
+    // Boundary checking
+    if (characterY < 20) {
+        characterY = 20;
         velocity = 0;
         if (!collisionSoundPlayed) {
             playCollisionSound();
             collisionSoundPlayed = true;
         }
-    } else if (characterY > gameArea.offsetHeight - 25 - characterElement.offsetHeight) {
-        characterY = gameArea.offsetHeight - 25 - characterElement.offsetHeight;
+    } else if (characterY > gameArea.offsetHeight - 20 - characterElement.offsetHeight) {
+        characterY = gameArea.offsetHeight - 20 - characterElement.offsetHeight;
         velocity = 0;
         if (!collisionSoundPlayed) {
             playCollisionSound();
@@ -369,42 +382,38 @@ function updateCharacterPosition() {
         }
     }
     
-    // Apply rotation based on velocity
-    let rotation = Math.min(Math.max(velocity * 3, -30), 30);
-    characterElement.style.transform = `rotate(${rotation}deg)`;
+    // Apply rotation
+    let rotation = Math.min(Math.max(velocity * 2, -25), 25);
     
-    // Update position
-    characterElement.style.left = `${characterX}px`;
-    characterElement.style.top = `${characterY}px`;
+    // Update transform for hardware acceleration
+    characterElement.style.transform = `translate3d(${characterX}px, ${characterY}px, 0) rotate(${rotation}deg)`;
 }
 
-function createObstacle() {
-    const gapHeight = isMobile ? 180 : 200;
-    const minGapPosition = 100;
-    const maxGapPosition = gameArea.offsetHeight - gapHeight - 100;
+function createOptimizedObstacle() {
+    const gapHeight = isMobile ? 160 : 180;
+    const minGapPosition = 80;
+    const maxGapPosition = gameArea.offsetHeight - gapHeight - 80;
     const gapPosition = Math.random() * (maxGapPosition - minGapPosition) + minGapPosition;
     
-    // Create top fire pole
+    // Create top pole
     const topPole = document.createElement('div');
     topPole.className = 'fire-pole top';
     topPole.style.height = `${gapPosition}px`;
-    topPole.style.left = `${gameArea.offsetWidth}px`;
+    topPole.style.transform = `translate3d(${gameArea.offsetWidth}px, 0, 0)`;
     
     const topPoleBody = document.createElement('div');
     topPoleBody.className = 'fire-pole-body';
-    topPoleBody.style.height = '100%';
     topPole.appendChild(topPoleBody);
     gameArea.appendChild(topPole);
     
-    // Create bottom fire pole
+    // Create bottom pole
     const bottomPole = document.createElement('div');
     bottomPole.className = 'fire-pole bottom';
     bottomPole.style.height = `${gameArea.offsetHeight - gapPosition - gapHeight}px`;
-    bottomPole.style.left = `${gameArea.offsetWidth}px`;
+    bottomPole.style.transform = `translate3d(${gameArea.offsetWidth}px, 0, 0)`;
     
     const bottomPoleBody = document.createElement('div');
     bottomPoleBody.className = 'fire-pole-body';
-    bottomPoleBody.style.height = '100%';
     bottomPole.appendChild(bottomPoleBody);
     gameArea.appendChild(bottomPole);
     
@@ -423,87 +432,77 @@ function moveObstacles() {
         const obstacle = obstacles[i];
         obstacle.x -= obstacleSpeed;
         
-        obstacle.top.style.left = `${obstacle.x}px`;
-        obstacle.bottom.style.left = `${obstacle.x}px`;
+        // Use transform3d for hardware acceleration
+        obstacle.top.style.transform = `translate3d(${obstacle.x}px, 0, 0)`;
+        obstacle.bottom.style.transform = `translate3d(${obstacle.x}px, 0, 0)`;
         
-        if (!obstacle.passed && obstacle.x + 60 < characterX) {
+        // Score update
+        if (!obstacle.passed && obstacle.x + 50 < characterX) {
             obstacle.passed = true;
             score++;
             scoreDisplay.textContent = `Score: ${score}`;
         }
         
-        if (obstacle.x < -60) {
-            gameArea.removeChild(obstacle.top);
-            gameArea.removeChild(obstacle.bottom);
+        // Remove off-screen obstacles
+        if (obstacle.x < -50) {
+            if (obstacle.top.parentNode) {
+                gameArea.removeChild(obstacle.top);
+            }
+            if (obstacle.bottom.parentNode) {
+                gameArea.removeChild(obstacle.bottom);
+            }
             obstacles.splice(i, 1);
         }
     }
 }
 
 function checkCollisions() {
-    if (characterY <= 25 || characterY >= gameArea.offsetHeight - 25 - characterElement.offsetHeight) {
+    // Quick boundary check
+    if (characterY <= 20 || characterY >= gameArea.offsetHeight - 20 - characterElement.offsetHeight) {
         return true;
     }
     
+    // Optimized collision detection with simpler math
+    const charRight = characterX + characterElement.offsetWidth;
+    const charBottom = characterY + characterElement.offsetHeight;
+    
     for (const obstacle of obstacles) {
-        const characterRect = {
-            left: characterX,
-            right: characterX + characterElement.offsetWidth,
-            top: characterY,
-            bottom: characterY + characterElement.offsetHeight
-        };
+        const poleRight = obstacle.x + 50;
         
-        const topPoleRect = {
-            left: obstacle.x,
-            right: obstacle.x + 60,
-            top: 0,
-            bottom: obstacle.gapPosition
-        };
-        
-        const bottomPoleRect = {
-            left: obstacle.x,
-            right: obstacle.x + 60,
-            top: obstacle.gapPosition + obstacle.gapHeight,
-            bottom: gameArea.offsetHeight
-        };
-        
-        if (characterRect.right > topPoleRect.left && 
-            characterRect.left < topPoleRect.right && 
-            characterRect.bottom > topPoleRect.top && 
-            characterRect.top < topPoleRect.bottom) {
-            if (!collisionSoundPlayed) {
-                playCollisionSound();
-                collisionSoundPlayed = true;
+        // Quick AABB test
+        if (charRight > obstacle.x && characterX < poleRight) {
+            // Check top pole collision
+            if (charBottom > 0 && characterY < obstacle.gapPosition) {
+                if (!collisionSoundPlayed) {
+                    playCollisionSound();
+                    collisionSoundPlayed = true;
+                }
+                return true;
             }
-            return true;
-        }
-        
-        if (characterRect.right > bottomPoleRect.left && 
-            characterRect.left < bottomPoleRect.right && 
-            characterRect.bottom > bottomPoleRect.top && 
-            characterRect.top < bottomPoleRect.bottom) {
-            if (!collisionSoundPlayed) {
-                playCollisionSound();
-                collisionSoundPlayed = true;
+            
+            // Check bottom pole collision
+            const bottomPoleTop = obstacle.gapPosition + obstacle.gapHeight;
+            if (characterY < gameArea.offsetHeight && charBottom > bottomPoleTop) {
+                if (!collisionSoundPlayed) {
+                    playCollisionSound();
+                    collisionSoundPlayed = true;
+                }
+                return true;
             }
-            return true;
         }
     }
     
     return false;
 }
 
+// Input handlers
 function handleKeyPress(e) {
     if (e.code === 'Space' && gameActive && !gamePaused) {
         e.preventDefault();
         jump();
     } else if (e.code === 'Escape' && gameActive) {
         e.preventDefault();
-        if (gamePaused) {
-            resumeGame();
-        } else {
-            pauseGame();
-        }
+        gamePaused ? resumeGame() : pauseGame();
     }
 }
 
@@ -514,13 +513,42 @@ function handleTap(e) {
 }
 
 function jump() {
-    velocity = isMobile ? -8 : -10;
+    velocity = isMobile ? -7 : -9;
     playJumpSound();
+}
+
+// Game state management
+function pauseGame() {
+    if (!gameActive || gamePaused) return;
+    
+    gamePaused = true;
+    cancelAnimationFrame(gameLoopId);
+    stopBackgroundMusic();
+    showPauseScreen();
+}
+
+function resumeGame() {
+    if (!gameActive || !gamePaused) return;
+    
+    gamePaused = false;
+    showGameScreen();
+    lastTimestamp = performance.now();
+    gameLoopId = requestAnimationFrame(optimizedGameLoop);
+    
+    if (musicEnabled) {
+        playBackgroundMusic();
+    }
+}
+
+function quitToMenu() {
+    gameActive = false;
+    gamePaused = false;
+    cancelAnimationFrame(gameLoopId);
+    showStartScreen();
 }
 
 function gameOver() {
     gameActive = false;
-    gamePaused = false;
     cancelAnimationFrame(gameLoopId);
     stopBackgroundMusic();
     
@@ -529,17 +557,41 @@ function gameOver() {
         localStorage.setItem('flappyFirePoleHighScore', highScore);
     }
     
-    setTimeout(showGameOverScreen, 800);
+    // Small delay for smooth transition
+    setTimeout(showGameOverScreen, 500);
 }
 
 function restartGame() {
     startGame();
 }
 
+// Audio functions
+function toggleMusic() {
+    musicEnabled = !musicEnabled;
+    localStorage.setItem('flappyFirePoleMusic', musicEnabled);
+    updateMusicButton();
+    
+    if (musicEnabled && gameScreen.classList.contains('active') && !gamePaused) {
+        playBackgroundMusic();
+    } else {
+        stopBackgroundMusic();
+    }
+}
+
+function updateMusicButton() {
+    const text = musicEnabled ? 'Music: ON' : 'Music: OFF';
+    if (musicToggle) musicToggle.textContent = text;
+    if (gameMusicToggle) gameMusicToggle.textContent = musicEnabled ? '🔊' : '🔇';
+}
+
 function playBackgroundMusic() {
     if (!musicEnabled) return;
-    backgroundMusic.currentTime = 0;
-    backgroundMusic.play().catch(e => console.log("Background music play failed:", e));
+    try {
+        backgroundMusic.currentTime = 0;
+        backgroundMusic.play().catch(e => console.log("Background music play failed:", e));
+    } catch (e) {
+        console.log("Background music error:", e);
+    }
 }
 
 function stopBackgroundMusic() {
@@ -549,38 +601,61 @@ function stopBackgroundMusic() {
 
 function playJumpSound() {
     if (!musicEnabled) return;
-    jumpSound.currentTime = 0;
-    jumpSound.play().catch(e => console.log("Jump sound play failed:", e));
+    try {
+        jumpSound.currentTime = 0;
+        jumpSound.play().catch(e => console.log("Jump sound play failed:", e));
+    } catch (e) {
+        console.log("Jump sound error:", e);
+    }
 }
 
 function playCollisionSound() {
     if (!musicEnabled) return;
-    collisionSound.currentTime = 0;
-    collisionSound.play().catch(e => console.log("Collision sound play failed:", e));
+    try {
+        collisionSound.currentTime = 0;
+        collisionSound.play().catch(e => console.log("Collision sound play failed:", e));
+    } catch (e) {
+        console.log("Collision sound error:", e);
+    }
 }
 
 function playCharacterDialogue() {
     if (!musicEnabled) return;
-    
-    let dialogue = dialogue1;
-    
-    dialogue.currentTime = 0;
-    dialogue.play().catch(e => console.log("Dialogue play failed:", e));
+    try {
+        dialogue1.currentTime = 0;
+        dialogue1.play().catch(e => console.log("Dialogue play failed:", e));
+    } catch (e) {
+        console.log("Dialogue error:", e);
+    }
+}
+
+// Performance and visibility handlers
+function handleVisibilityChange() {
+    if (document.hidden && gameActive && !gamePaused) {
+        pauseGame();
+    }
+}
+
+function handleWindowBlur() {
+    if (gameActive && !gamePaused) {
+        pauseGame();
+    }
 }
 
 // Initialize the game when the page loads
 window.addEventListener('load', init);
 
-// Prevent scrolling on mobile
-document.addEventListener('touchmove', function(e) {
-    if (gameActive) {
+// Prevent default touch behaviors
+document.addEventListener('touchstart', function(e) {
+    if (e.target.tagName !== 'BUTTON') {
         e.preventDefault();
     }
 }, { passive: false });
 
-// Handle visibility change (when app goes to background)
-document.addEventListener('visibilitychange', function() {
-    if (document.hidden && gameActive && !gamePaused) {
-        pauseGame();
+// Force garbage collection on game over (where possible)
+function forceCleanup() {
+    if (window.gc) {
+        window.gc();
     }
-});
+    obstacles = [];
+}
