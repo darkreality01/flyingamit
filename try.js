@@ -87,8 +87,8 @@ function init() {
     
     // Set up game controls
     document.addEventListener('keydown', handleKeyPress);
-    document.addEventListener('click', handleTap);
-    document.addEventListener('touchstart', handleTap, { passive: false });
+    document.addEventListener("touchstart", shoot);
+document.addEventListener("click", shoot);
     
     // Pre-select the saved character
     const savedCharacter = document.querySelector(`.character[data-character="${selectedCharacter}"]`);
@@ -596,4 +596,5 @@ function playCharacterDialogue() {
 }
 
 // Initialize the game when the page loads
+
 window.addEventListener('load', init);
