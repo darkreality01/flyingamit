@@ -597,4 +597,6 @@ function playCharacterDialogue() {
 
 // Initialize the game when the page loads
 
-window.addEventListener('load', init);
+window.addEventListener("pointerdown", jump);
+
+
