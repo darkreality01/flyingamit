@@ -2,10 +2,11 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Flappy Fire Pole</title>
     <link rel="stylesheet" href="try.css">
 </head>
+
 <body>
     <!-- Start Screen -->
     <div id="startScreen" class="screen active">
@@ -67,44 +68,19 @@
     </div>
 
     <!-- Audio Elements -->
-    <audio id="backgroundMusic" loop>
-        <source src="Captain Himself - In a Spanish Mood [sTXOBw5GA5o].mp3" type="audio/mpeg">
-        Your browser does not support the audio element.
+    <audio id="backgroundMusic" loop preload="auto">
+        <source src="" type="audio/mpeg">
     </audio>
-    <audio id="jumpSound">
+    <audio id="jumpSound" preload="auto">
         <source src="Mario jumping sound effect..mp3" type="audio/mpeg">
-        Your browser does not support the audio element.
     </audio>
-    <audio id="collisionSound">
+    <audio id="collisionSound" preload="auto">
         <source src="assets/sounds/collision.mp3" type="audio/mpeg">
-        Your browser does not support the audio element.
     </audio>
-    <audio id="dialogue1">
+    <audio id="dialogue1" preload="auto">
         <source src="WhatsApp Audio 2025-09-26 at 19.54.41_8390e012.mp3" type="audio/mpeg">
-        Your browser does not support the audio element.
     </audio>
 
     <script src="try.js"></script>
-    
-    <script>
-        // Handle image loading errors
-        function handleImageError(img) {
-            console.log('Image failed to load:', img.src);
-            const placeholder = document.createElement('div');
-            placeholder.className = 'character-img-placeholder';
-            placeholder.textContent = 'Char ' + img.parentElement.getAttribute('data-character');
-            img.parentElement.replaceChild(placeholder, img);
-        }
-        
-        // Apply error handler to all character images
-        document.addEventListener('DOMContentLoaded', function() {
-            const characterImages = document.querySelectorAll('.character-img');
-            characterImages.forEach(img => {
-                img.onerror = function() {
-                    handleImageError(this);
-                };
-            });
-        });
-    </script>
 </body>
 </html>
